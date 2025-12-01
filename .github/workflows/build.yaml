@@ -1,7 +1,10 @@
-name: build
+name: build-go1.24.3-tls-clienthellohook
 
 on:
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,3 +18,63 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
+
+      - name: Clone Go 1.24.3 source
+        run: |
+          set -euo pipefail
+          git clone https://go.googlesource.com/go "$HOME/go-src"
+          cd "$HOME/go-src"
+          git checkout go1.24.3
+
+      - name: Apply crypto/tls ClientHelloHook patch
+        run: |
+          set -euo pipefail
+          cd "$HOME/go-src"
+          git apply --verbose "$GITHUB_WORKSPACE/patches/0001-clienthello-hook.patch"
+
+      - name: Build patched Go toolchain
+        run: |
+          set -euo pipefail
+          cd "$HOME/go-src/src"
+          ./make.bash
+          echo "GOROOT=$HOME/go-src" >> $GITHUB_ENV
+          echo "$HOME/go-src/bin" >> $GITHUB_PATH
+
+      - name: Export patched tls files and overlay template
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/overlay/crypto/tls"
+
+          cp "$GOROOT/src/crypto/tls/common.go" \
+             "$GOROOT/src/crypto/tls/handshake_client.go" \
+             "$GITHUB_WORKSPACE/overlay/crypto/tls/"
+
+      - name: Upload overlay artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go1.24.3
+          path: overlay/
+
+      - name: Commit overlay files into branch
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain overlay/crypto/tls)" ]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          echo "Changes detected in overlay/crypto/tls:"
+          git status
+          git diff overlay/crypto/tls || true
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add overlay
+          git commit -m "Update overlay files for go1.24.3 (auto-generated)"
+
+          BRANCH_NAME="${GITHUB_REF##refs/heads/}"
+          echo "Pushing to ${BRANCH_NAME}"
+
+          git push origin "HEAD:${BRANCH_NAME}"
