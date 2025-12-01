@@ -1,0 +1,6 @@
+{
+    "Replace": {
+        "__GOROOT__/src/crypto/tls/common.go": "crypto/tls/common.go",
+        "__GOROOT__/src/crypto/tls/handshake_client.go": "crypto/tls/handshake_client.go"
+    }
+}
