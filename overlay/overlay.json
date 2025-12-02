@@ -1,6 +1,6 @@
 {
-    "Replace": {
-        "__GOROOT__/src/crypto/tls/common.go": "crypto/tls/common.go",
-        "__GOROOT__/src/crypto/tls/handshake_client.go": "crypto/tls/handshake_client.go"
-    }
+  "Replace": {
+    "C:\\Program Files\\Go\\src\\crypto\\tls\\common.go": "C:\\Users\\ghxst\\Documents\\Ghxst\\xTLS\\overlay\\crypto\\tls\\common.go",
+    "C:\\Program Files\\Go\\src\\crypto\\tls\\handshake_client.go": "C:\\Users\\ghxst\\Documents\\Ghxst\\xTLS\\overlay\\crypto\\tls\\handshake_client.go"
+  }
 }

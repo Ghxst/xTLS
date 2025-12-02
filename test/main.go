@@ -63,6 +63,41 @@ func generateSelfSignedCert() (tls.Certificate, *x509.CertPool) {
 	return cert, pool
 }
 
+var greaseValues = []uint16{
+	0x0a0a, 0x1a1a, 0x2a2a, 0x3a3a,
+	0x4a4a, 0x5a5a, 0x6a6a, 0x7a7a,
+	0x8a8a, 0x9a9a, 0xaaaa, 0xbaba,
+	0xcaca, 0xdada, 0xeaea, 0xfafa,
+}
+
+func pickGrease() uint16 {
+	// for testing don't care about crypto strength
+	var b [1]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		return 0x0a0a
+	}
+
+	return greaseValues[int(b[0])%len(greaseValues)]
+}
+
+// greaseMessage prepends a GREASE value to selected ClientHello fields.
+// Only fields that are already present get greased, matching real-world behavior.
+func greaseMessage(ch *clientHelloMsg, gv uint16) {
+	// Always grease cipher suites.
+	ch.cipherSuites = append([]uint16{gv}, ch.cipherSuites...)
+
+	// GREASE supported TLS versions (if sent).
+	if len(ch.supportedVersions) > 0 {
+		ch.supportedVersions = append([]uint16{gv}, ch.supportedVersions...)
+	}
+
+	// GREASE supported curves (if sent).
+	if len(ch.supportedCurves) > 0 {
+		ch.supportedCurves = append([]CurveID{CurveID(gv)}, ch.supportedCurves...)
+	}
+}
+
 func main() {
 	cert, rootPool := generateSelfSignedCert()
 
@@ -95,18 +130,25 @@ func main() {
 		ClientHelloHook: func(p unsafe.Pointer) {
 			ch := (*clientHelloMsg)(p)
 
+			// Pick a GREASE value for this ClientHello.
+			// A random value from the GREASE set is chosen each handshake.
+			gv := pickGrease()
+
+			// Apply GREASE to cipher suites, versions, and curves.
+			greaseMessage(ch, gv)
+
 			msg := struct {
-				Vers              uint16   `json:"vers"`
-				ServerName        string   `json:"serverName"`
-				CipherSuites      []uint16 `json:"cipherSuites"`
-				ALPNProtocols     []string `json:"alpnProtocols"`
-				SupportedVersions []uint16 `json:"supportedVersions"`
+				Vers              uint16    `json:"vers"`
+				ServerName        string    `json:"serverName"`
+				CipherSuites      []uint16  `json:"cipherSuites"`
+				SupportedVersions []uint16  `json:"supportedVersions"`
+				SupportedCurves   []CurveID `json:"supportedCurves"`
 			}{
 				Vers:              ch.vers,
 				ServerName:        ch.serverName,
 				CipherSuites:      ch.cipherSuites,
-				ALPNProtocols:     ch.alpnProtocols,
 				SupportedVersions: ch.supportedVersions,
+				SupportedCurves:   ch.supportedCurves,
 			}
 
 			b, err := json.MarshalIndent(msg, "", "  ")
